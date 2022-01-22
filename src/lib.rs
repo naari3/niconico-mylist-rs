@@ -11,6 +11,7 @@ pub type Result<T> = StdResult<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
+    Status(NicoError),
     Http(reqwest::Error),
     Json(serde_json::Error),
 }
@@ -18,7 +19,12 @@ pub enum Error {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NicoResult<T> {
     pub meta: NicoMeta,
-    pub data: Option<T>,
+    pub data: T,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NicoError {
+    pub meta: NicoMeta,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -146,8 +152,10 @@ pub async fn get_my_mylists(
     let string = response.text().await.map_err(Error::Http)?;
 
     if status_code.as_u16() > 299u16 {
-        println!("{}", string);
+        let err: NicoError = serde_json::from_str(&string).map_err(Error::Json)?;
+        return Err(Error::Status(err));
     }
+
     let response = serde_json::from_str(&string).map_err(Error::Json)?;
 
     Ok(response)
@@ -211,8 +219,10 @@ pub async fn get_mylist(
     let string = response.text().await.map_err(Error::Http)?;
 
     if status_code.as_u16() > 299u16 {
-        println!("{}", string);
+        let err: NicoError = serde_json::from_str(&string).map_err(Error::Json)?;
+        return Err(Error::Status(err));
     }
+
     let response = serde_json::from_str(&string).map_err(Error::Json)?;
 
     Ok(response)
@@ -224,16 +234,7 @@ pub async fn get_mylist_all(
     id: usize,
 ) -> Result<NicoResult<MylistResponse>> {
     let mut first_mylist = get_mylist(user_session, user_session_secure, id, 100, 1).await?;
-    if let None = first_mylist.data {
-        return Ok(first_mylist);
-    };
-    if !first_mylist
-        .data
-        .as_ref()
-        .expect("must exist")
-        .mylist
-        .has_next
-    {
+    if !first_mylist.data.mylist.has_next {
         return Ok(first_mylist);
     }
 
@@ -241,20 +242,14 @@ pub async fn get_mylist_all(
     let mut extend_items = Vec::new();
     loop {
         let next_mylist = get_mylist(user_session, user_session_secure, id, 100, page).await?;
-        if let Some(data) = next_mylist.data {
-            extend_items.extend(data.mylist.items);
-            if !data.mylist.has_next {
-                break;
-            }
-            page += 1;
-        } else {
+        extend_items.extend(next_mylist.data.mylist.items);
+        if !next_mylist.data.mylist.has_next {
             break;
         }
+        page += 1;
     }
 
-    if let Some(ref mut data) = first_mylist.data {
-        data.mylist.items.extend(extend_items);
-    };
+    first_mylist.data.mylist.items.extend(extend_items);
 
     Ok(first_mylist)
 }
@@ -278,10 +273,7 @@ mod tests {
             .await
             .unwrap();
 
-        println!(
-            "mylists len: {:?}",
-            result.data.expect("should exist").mylists.len()
-        );
+        println!("mylists len: {:?}", result.data.mylists.len());
     }
 
     #[tokio::test]
@@ -289,10 +281,7 @@ mod tests {
         let result = get_mylist(USER_SESSION, USER_SESSION_SECURE, 71381719, 100, 1)
             .await
             .unwrap();
-        println!(
-            "mylist len: {:?}",
-            result.data.expect("should exist").mylist.items.len()
-        );
+        println!("mylist len: {:?}", result.data.mylist.items.len());
     }
 
     #[tokio::test]
@@ -300,9 +289,6 @@ mod tests {
         let result = get_mylist_all(USER_SESSION, USER_SESSION_SECURE, 71381719)
             .await
             .unwrap();
-        println!(
-            "mylist len: {:?}",
-            result.data.expect("should exist").mylist.items.len()
-        );
+        println!("mylist len: {:?}", result.data.mylist.items.len());
     }
 }
