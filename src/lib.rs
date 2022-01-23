@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use reqwest::{cookie::Jar, Client, Url};
+use reqwest::{cookie::CookieStore, Client, Url};
 use serde::{Deserialize, Serialize};
 
 type StdResult<T, E> = std::result::Result<T, E>;
@@ -28,17 +28,19 @@ pub struct NicoError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct NicoMeta {
     pub status: usize,
+    pub error_code: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MylistsResponse {
     #[serde(default)]
     pub mylists: Vec<Mylist>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Mylist {
     pub id: usize,
@@ -65,7 +67,7 @@ pub struct Owner {
     pub icon_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
     pub item_id: usize,
@@ -76,7 +78,7 @@ pub struct Item {
     pub video: Video,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Video {
     #[serde(rename(deserialize = "type"))]
@@ -91,7 +93,7 @@ pub struct Video {
     pub latest_comment_summary: String,
     pub is_channel_video: bool,
     pub is_payment_required: bool,
-    pub playback_position: Option<usize>,
+    pub playback_position: Option<f32>,
     pub owner: Owner,
     pub require_sensitive_masking: bool,
     pub video_live: Option<String>,
@@ -120,9 +122,8 @@ pub struct Thumbnail {
     pub n_hd_url: Option<String>,
 }
 
-pub async fn get_my_mylists(
-    user_session: &str,
-    user_session_secure: &str,
+pub async fn get_my_mylists<C: CookieStore + 'static>(
+    cookie_store: Arc<C>,
     sample_item_count: usize,
 ) -> Result<NicoResult<MylistsResponse>> {
     let url = format!(
@@ -131,15 +132,9 @@ pub async fn get_my_mylists(
     )
     .parse::<Url>()
     .expect("This is illegal");
-    let cookie = format!(
-        "user_session={}; user_session_secure={}",
-        user_session, user_session_secure
-    );
-    let jar = Jar::default();
-    jar.add_cookie_str(&cookie, &url);
 
     let client = Client::builder()
-        .cookie_provider(Arc::new(jar))
+        .cookie_provider(cookie_store)
         .build()
         .map_err(Error::Http)?;
     let response = client
@@ -161,12 +156,12 @@ pub async fn get_my_mylists(
     Ok(response)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MylistResponse {
     pub mylist: MylistDetail,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MylistDetail {
     pub id: usize,
@@ -185,9 +180,8 @@ pub struct MylistDetail {
     pub is_following: bool,
 }
 
-pub async fn get_mylist(
-    user_session: &str,
-    user_session_secure: &str,
+pub async fn get_mylist<C: CookieStore + 'static>(
+    cookie_store: Arc<C>,
     id: usize,
     page_size: usize,
     page: usize,
@@ -198,15 +192,8 @@ pub async fn get_mylist(
     )
     .parse::<Url>()
     .expect("This is illegal");
-    let cookie = format!(
-        "user_session={}; user_session_secure={}",
-        user_session, user_session_secure
-    );
-    let jar = Jar::default();
-    jar.add_cookie_str(&cookie, &url);
-
     let client = Client::builder()
-        .cookie_provider(Arc::new(jar))
+        .cookie_provider(cookie_store)
         .build()
         .map_err(Error::Http)?;
     let response = client
@@ -228,12 +215,11 @@ pub async fn get_mylist(
     Ok(response)
 }
 
-pub async fn get_mylist_all(
-    user_session: &str,
-    user_session_secure: &str,
+pub async fn get_mylist_all<C: CookieStore + 'static>(
+    cookie_store: Arc<C>,
     id: usize,
 ) -> Result<NicoResult<MylistResponse>> {
-    let mut first_mylist = get_mylist(user_session, user_session_secure, id, 100, 1).await?;
+    let mut first_mylist = get_mylist(cookie_store.clone(), id, 100, 1).await?;
     if !first_mylist.data.mylist.has_next {
         return Ok(first_mylist);
     }
@@ -241,7 +227,7 @@ pub async fn get_mylist_all(
     let mut page = 2;
     let mut extend_items = Vec::new();
     loop {
-        let next_mylist = get_mylist(user_session, user_session_secure, id, 100, page).await?;
+        let next_mylist = get_mylist(cookie_store.clone(), id, 100, page).await?;
         extend_items.extend(next_mylist.data.mylist.items);
         if !next_mylist.data.mylist.has_next {
             break;
@@ -256,6 +242,8 @@ pub async fn get_mylist_all(
 
 #[cfg(test)]
 mod tests {
+    use reqwest::cookie::Jar;
+
     use super::*;
 
     static USER_SESSION: &str = "user_session_replace_this";
@@ -269,26 +257,47 @@ mod tests {
 
     #[tokio::test]
     async fn get_my_mylists_works() {
-        let result = get_my_mylists(USER_SESSION, USER_SESSION_SECURE, 4)
-            .await
-            .unwrap();
+        let jar = Jar::default();
+        jar.add_cookie_str(
+            &format!(
+                "user_session={}; user_session_secure={};",
+                USER_SESSION, USER_SESSION_SECURE
+            ),
+            &Url::parse("https://nvapi.nicovideo.jp/").unwrap(),
+        );
+
+        let result = get_my_mylists(Arc::new(jar), 4).await.unwrap();
 
         println!("mylists len: {:?}", result.data.mylists.len());
     }
 
     #[tokio::test]
     async fn get_mylist_works() {
-        let result = get_mylist(USER_SESSION, USER_SESSION_SECURE, 71381719, 100, 1)
-            .await
-            .unwrap();
+        let jar = Jar::default();
+        jar.add_cookie_str(
+            &format!(
+                "user_session={}; user_session_secure={};",
+                USER_SESSION, USER_SESSION_SECURE
+            ),
+            &Url::parse("https://nvapi.nicovideo.jp/").unwrap(),
+        );
+
+        let result = get_mylist(Arc::new(jar), 71381719, 100, 1).await.unwrap();
         println!("mylist len: {:?}", result.data.mylist.items.len());
     }
 
     #[tokio::test]
     async fn get_mylist_all_works() {
-        let result = get_mylist_all(USER_SESSION, USER_SESSION_SECURE, 71381719)
-            .await
-            .unwrap();
+        let jar = Jar::default();
+        jar.add_cookie_str(
+            &format!(
+                "user_session={}; user_session_secure={};",
+                USER_SESSION, USER_SESSION_SECURE
+            ),
+            &Url::parse("https://nvapi.nicovideo.jp/").unwrap(),
+        );
+
+        let result = get_mylist_all(Arc::new(jar), 71381719).await.unwrap();
         println!("mylist len: {:?}", result.data.mylist.items.len());
     }
 }
