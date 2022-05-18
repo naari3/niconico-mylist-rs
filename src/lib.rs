@@ -3,6 +3,9 @@ use std::sync::Arc;
 use reqwest::{cookie::CookieStore, Client, Url};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ts")]
+use ts_rs::TS;
+
 type StdResult<T, E> = std::result::Result<T, E>;
 
 /// Result type used by this crate. This is equivalent
@@ -17,17 +20,23 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct NicoResult<T> {
     pub meta: NicoMeta,
     pub data: T,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct NicoError {
     pub meta: NicoMeta,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct NicoMeta {
     pub status: usize,
@@ -35,12 +44,16 @@ pub struct NicoMeta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct MylistsResponse {
     #[serde(default)]
     pub mylists: Vec<Mylist>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Mylist {
     pub id: usize,
@@ -59,6 +72,8 @@ pub struct Mylist {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Owner {
     pub owner_type: String,
@@ -68,6 +83,8 @@ pub struct Owner {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
     pub item_id: usize,
@@ -79,8 +96,11 @@ pub struct Item {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Video {
+    #[cfg_attr(feature = "ts", ts(rename = "type"))]
     #[serde(rename(deserialize = "type"))]
     pub video_type: String,
     pub id: String,
@@ -97,13 +117,17 @@ pub struct Video {
     pub owner: Owner,
     pub require_sensitive_masking: bool,
     pub video_live: Option<String>,
+    // #[cfg_attr(feature = "ts", ts(rename = "9d091f87"))]
     #[serde(rename(deserialize = "9d091f87"))]
     pub n_9d091f87: bool,
+    // #[cfg_attr(feature = "ts", ts(rename = "acf68865"))]
     #[serde(rename(deserialize = "acf68865"))]
     pub n_acf68865: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Count {
     pub view: usize,
@@ -113,6 +137,8 @@ pub struct Count {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Thumbnail {
     pub url: String,
@@ -157,11 +183,15 @@ pub async fn get_my_mylists<C: CookieStore + 'static>(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct MylistResponse {
     pub mylist: MylistDetail,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct MylistDetail {
     pub id: usize,
